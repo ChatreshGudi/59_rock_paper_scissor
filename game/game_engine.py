@@ -39,9 +39,7 @@ class GameEngine:
     def determine_winner(self, player, cpu):
         if player == cpu:
             return "TIE"
-        
-        # BUG SYMPTOM: 
-        # All winning matchups are inverted, causing player choices to lose against what they normally beat.
+            
         rules = {
             ("ROCK", "SCISSORS"): "CPU",
             ("SCISSORS", "PAPER"): "CPU",
