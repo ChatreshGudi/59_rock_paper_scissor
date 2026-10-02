@@ -43,19 +43,19 @@ Each task must be completed using an iterative process involving LLM suggestions
 
 ### Task 1: Fix the inverted outcome evaluation bug
 
-Whenever the player plays a winning hand against the CPU, the game registers it as a loss. In game_engine.determine_winner(), the outcome lookup dictionary has inverted results for winning combinations: ("ROCK", "SCISSORS"), ("SCISSORS", "PAPER"), and ("PAPER", "ROCK") are assigned to "CPU" while losing combinations are assigned to "PLAYER". Correct the lookup table mappings so Rock beats Scissors, Scissors beats Paper, and Paper beats Rock.
+Whenever the player throws a winning hand against the computer, the game awards the point to the CPU instead of the player. Correct the outcome evaluation logic so standard rules apply (Rock beats Scissors, Scissors beats Paper, and Paper beats Rock).
 
 ### Task 2: Implement "First to X Wins" match victory state
 
-Currently, the game plays endlessly and keeps accumulating scores without a decisive match winner. Implement a target score ceiling . Once either the player or CPU reaches the target score, transition to a GAME_OVER match victory screen declaring the overall champion and prompt the player to press R to reset both scores.
+The game currently loops endlessly with no decisive match conclusion. Introduce a target win ceiling that halts play when reached, presents an end-of-match victory banner declaring the ultimate winner, and prompts the player to restart.
 
-### Task 3: Implement dynamic / adaptive AI counter-strategy
+### Task 3: Implement adaptive AI pattern tracking
 
-The CPU currently picks its move completely at random using random.choice(self.choices). Replace this with an adaptive AI strategy that tracks the player's choice history. If the player frequently favors one move (e.g., throwing Rock 60% of the time), bias the CPU's selection towards the counter-move to create an evolving challenge.
+The computer currently picks its moves entirely at random. Introduce adaptive intelligence that records the player's recent throw tendencies and dynamically biases CPU selections toward the counter-move when a player repeatedly favors a specific option.
 
-### Task 4: Implement hand gesture animated icons or icons reveal
+### Task 4: Implement Procedural Gesture Icons & Reveal Animations
 
-The game displays picks only as simple plain text strings. Enhance game_engine.render() by drawing procedural geometric representations or icons for each move (a stone shape for Rock, a sheet outline for Paper, crossing blades for Scissors) with a brief shake animation before revealing both selections
+Selections are currently rendered as plain text labels. Create distinct visual graphic icons for Rock, Paper, and Scissors, adding a synchronized countdown or shaking reveal animation before displaying both choices each turn.
 
 ---
 
