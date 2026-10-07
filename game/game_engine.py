@@ -8,7 +8,7 @@ class GameEngine:
   def __init__(self, width, height, target_score=3):
     self.width = width
     self.height = height
-    self.target_score = target_score  # First player to reach this wins match
+    self.target_score = target_score
 
     self.choices = ["ROCK", "PAPER", "SCISSORS"]
     btn_w, btn_h = 130, 50
@@ -50,9 +50,16 @@ class GameEngine:
     self.display_duration = 1800
     self.showing_result = False
 
-    # Match victory state variables
+    # Match state variables
     self.match_over = False
-    self.match_winner = None  # "PLAYER" or "CPU"
+    self.match_winner = None
+
+    # Adaptive AI tracking
+    self.player_history = []
+    self.player_move_counts = {"ROCK": 0, "PAPER": 0, "SCISSORS": 0}
+
+    # Moves mapped to their direct counter
+    self.counters = {"ROCK": "PAPER", "PAPER": "SCISSORS", "SCISSORS": "ROCK"}
 
     self.font_title = pygame.font.SysFont(None, 36)
     self.font_hud = pygame.font.SysFont(None, 26)
@@ -60,7 +67,7 @@ class GameEngine:
     self.font_banner = pygame.font.SysFont(None, 48)
 
   def reset_match(self):
-    """Resets the match back to initial state."""
+    """Resets scores, match state, and AI tracking memory."""
     self.player_score = 0
     self.cpu_score = 0
     self.player_choice = None
@@ -70,6 +77,35 @@ class GameEngine:
     self.showing_result = False
     self.match_over = False
     self.match_winner = None
+
+    # Reset adaptive AI state
+    self.player_history.clear()
+    self.player_move_counts = {"ROCK": 0, "PAPER": 0, "SCISSORS": 0}
+
+  def get_adaptive_cpu_choice(self):
+    """Generates CPU choice biased toward countering player tendency."""
+    total_moves = len(self.player_history)
+
+    # Pick purely randomly for early moves (under 2 rounds)
+    if total_moves < 2:
+      return random.choice(self.choices)
+
+    # Base probability weights for [ROCK, PAPER, SCISSORS]
+    weights = [1.0, 1.0, 1.0]
+
+    # Adjust CPU weights based on player choice frequencies
+    for i, choice in enumerate(self.choices):
+      # Frequency of player picking this choice
+      player_freq = self.player_move_counts[choice] / total_moves
+
+      # Find which CPU move counters this player choice
+      counter_move = self.counters[choice]
+      counter_index = self.choices.index(counter_move)
+
+      # Increase weight of counter-move proportionally to player choice bias
+      weights[counter_index] += player_freq * 3.0
+
+    return random.choices(self.choices, weights=weights, k=1)[0]
 
   def determine_winner(self, player, cpu):
     if player == cpu:
@@ -86,7 +122,13 @@ class GameEngine:
       return
 
     self.player_choice = choice
-    self.cpu_choice = random.choice(self.choices)
+
+    # Get CPU selection from adaptive tracking module
+    self.cpu_choice = self.get_adaptive_cpu_choice()
+
+    # Record player move into AI memory
+    self.player_history.append(choice)
+    self.player_move_counts[choice] += 1
 
     outcome = self.determine_winner(self.player_choice, self.cpu_choice)
     if outcome == "PLAYER":
@@ -105,7 +147,7 @@ class GameEngine:
       self.result_text = f"It's a Draw! Both picked {self.player_choice}."
       self.result_color = (240, 210, 80)
 
-    # Check for match victory conditions
+    # Check match conclusion
     if self.player_score >= self.target_score:
       self.match_over = True
       self.match_winner = "PLAYER"
@@ -117,14 +159,12 @@ class GameEngine:
       self.round_resolved_time = pygame.time.get_ticks()
 
   def handle_event(self, event):
-    # Allow pressing R or SPACE to restart match when over
     if event.type == pygame.KEYDOWN:
       if event.key in (pygame.K_r, pygame.K_SPACE) and self.match_over:
         self.reset_match()
         return
 
     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-      # Block input while timer is showing or match is complete
       if self.showing_result or self.match_over:
         return
 
@@ -192,7 +232,7 @@ class GameEngine:
     )
     screen.blit(res_surf, (self.width // 2 - res_surf.get_width() // 2, 205))
 
-    # Render Buttons
+    # Buttons
     mouse_pos = pygame.mouse.get_pos()
     for btn in self.buttons:
       if hasattr(btn, "update"):
@@ -201,9 +241,8 @@ class GameEngine:
         )
       btn.render(screen)
 
-    # Render Match Victory Overlay
+    # Match Victory Overlay
     if self.match_over:
-      # Semi-transparent dark overlay over the middle arena
       overlay = pygame.Surface((self.width - 80, 160), pygame.SRCALPHA)
       overlay.fill((15, 18, 24, 230))
       screen.blit(overlay, (40, 100))
