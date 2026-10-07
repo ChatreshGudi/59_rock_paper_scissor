@@ -48,7 +48,7 @@ class GameEngine:
     self.cpu_score = 0
 
     self.round_resolved_time = 0
-    self.display_duration = 2000
+    self.display_duration = 1800  # Set exactly to 1.8 seconds (1800 ms) as expected
     self.showing_result = False
 
     # Match state variables
@@ -58,7 +58,7 @@ class GameEngine:
     # Reveal animation state variables
     self.animating_reveal = False
     self.reveal_start_time = 0
-    self.reveal_duration = 1500  # Total animation duration before reveal
+    self.reveal_duration = 1500
     self.pending_player_choice = None
     self.pending_cpu_choice = None
     self.countdown_text = ""
@@ -170,6 +170,7 @@ class GameEngine:
         return
 
     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+      # Tighten checks to block quick double clicks while animations/results render
       if self.showing_result or self.match_over or self.animating_reveal:
         return
 
@@ -196,7 +197,7 @@ class GameEngine:
         self.finalize_round()
       return
 
-    # Handle post-round result display reset
+    # Handle post-round result display reset (clears back to standard start)
     if self.showing_result and (
         now - self.round_resolved_time >= self.display_duration
     ):
@@ -212,7 +213,6 @@ class GameEngine:
     hs = size // 2
 
     if choice == "ROCK":
-      # Circle stone emblem with faceted geometry
       pygame.draw.circle(surface, color, (cx, cy), hs, width=3)
       pygame.draw.circle(surface, (140, 60, 60), (cx, cy), hs - 4)
       pts = [
@@ -225,11 +225,9 @@ class GameEngine:
       pygame.draw.polygon(surface, color, pts, width=2)
 
     elif choice == "PAPER":
-      # Sheet document icon with corner fold
       rect = pygame.Rect(cx - hs + 4, cy - hs, size - 8, size)
       pygame.draw.rect(surface, (50, 120, 190), rect, border_radius=4)
       pygame.draw.rect(surface, color, rect, width=2, border_radius=4)
-      # Lines representing text on paper
       pygame.draw.line(
           surface, color, (cx - 8, cy - 6), (cx + 8, cy - 6), 2
       )
@@ -241,7 +239,6 @@ class GameEngine:
       )
 
     elif choice == "SCISSORS":
-      # Scissors blades with handle rings
       pygame.draw.circle(surface, color, (cx - 10, cy + 12), 7, width=2)
       pygame.draw.circle(surface, color, (cx + 10, cy + 12), 7, width=2)
       pygame.draw.line(
