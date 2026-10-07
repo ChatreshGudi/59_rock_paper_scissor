@@ -1,3 +1,4 @@
+import math
 import random
 import pygame
 from game.button import ChoiceButton
@@ -47,24 +48,31 @@ class GameEngine:
     self.cpu_score = 0
 
     self.round_resolved_time = 0
-    self.display_duration = 1800
+    self.display_duration = 2000
     self.showing_result = False
 
     # Match state variables
     self.match_over = False
     self.match_winner = None
 
+    # Reveal animation state variables
+    self.animating_reveal = False
+    self.reveal_start_time = 0
+    self.reveal_duration = 1500  # Total animation duration before reveal
+    self.pending_player_choice = None
+    self.pending_cpu_choice = None
+    self.countdown_text = ""
+
     # Adaptive AI tracking
     self.player_history = []
     self.player_move_counts = {"ROCK": 0, "PAPER": 0, "SCISSORS": 0}
-
-    # Moves mapped to their direct counter
     self.counters = {"ROCK": "PAPER", "PAPER": "SCISSORS", "SCISSORS": "ROCK"}
 
     self.font_title = pygame.font.SysFont(None, 36)
     self.font_hud = pygame.font.SysFont(None, 26)
-    self.font_arena = pygame.font.SysFont(None, 32)
+    self.font_arena = pygame.font.SysFont(None, 30)
     self.font_banner = pygame.font.SysFont(None, 48)
+    self.font_count = pygame.font.SysFont(None, 44)
 
   def reset_match(self):
     """Resets scores, match state, and AI tracking memory."""
@@ -75,34 +83,23 @@ class GameEngine:
     self.result_text = "Make your move!"
     self.result_color = (220, 225, 235)
     self.showing_result = False
+    self.animating_reveal = False
     self.match_over = False
     self.match_winner = None
 
-    # Reset adaptive AI state
     self.player_history.clear()
     self.player_move_counts = {"ROCK": 0, "PAPER": 0, "SCISSORS": 0}
 
   def get_adaptive_cpu_choice(self):
-    """Generates CPU choice biased toward countering player tendency."""
     total_moves = len(self.player_history)
-
-    # Pick purely randomly for early moves (under 2 rounds)
     if total_moves < 2:
       return random.choice(self.choices)
 
-    # Base probability weights for [ROCK, PAPER, SCISSORS]
     weights = [1.0, 1.0, 1.0]
-
-    # Adjust CPU weights based on player choice frequencies
     for i, choice in enumerate(self.choices):
-      # Frequency of player picking this choice
       player_freq = self.player_move_counts[choice] / total_moves
-
-      # Find which CPU move counters this player choice
       counter_move = self.counters[choice]
       counter_index = self.choices.index(counter_move)
-
-      # Increase weight of counter-move proportionally to player choice bias
       weights[counter_index] += player_freq * 3.0
 
     return random.choices(self.choices, weights=weights, k=1)[0]
@@ -110,25 +107,34 @@ class GameEngine:
   def determine_winner(self, player, cpu):
     if player == cpu:
       return "TIE"
-
     winning_moves = {"ROCK": "SCISSORS", "PAPER": "ROCK", "SCISSORS": "PAPER"}
-
     if winning_moves.get(player) == cpu:
       return "PLAYER"
     return "CPU"
 
   def play_round(self, choice):
-    if self.match_over:
+    if self.match_over or self.animating_reveal or self.showing_result:
       return
 
-    self.player_choice = choice
+    # Store choices for deferred reveal post-animation
+    self.pending_player_choice = choice
+    self.pending_cpu_choice = self.get_adaptive_cpu_choice()
 
-    # Get CPU selection from adaptive tracking module
-    self.cpu_choice = self.get_adaptive_cpu_choice()
+    self.player_choice = None
+    self.cpu_choice = None
 
-    # Record player move into AI memory
     self.player_history.append(choice)
     self.player_move_counts[choice] += 1
+
+    # Start reveal animation sequence
+    self.animating_reveal = True
+    self.reveal_start_time = pygame.time.get_ticks()
+
+  def finalize_round(self):
+    """Evaluates and presents results after shaking animation ends."""
+    self.player_choice = self.pending_player_choice
+    self.cpu_choice = self.pending_cpu_choice
+    self.animating_reveal = False
 
     outcome = self.determine_winner(self.player_choice, self.cpu_choice)
     if outcome == "PLAYER":
@@ -147,7 +153,6 @@ class GameEngine:
       self.result_text = f"It's a Draw! Both picked {self.player_choice}."
       self.result_color = (240, 210, 80)
 
-    # Check match conclusion
     if self.player_score >= self.target_score:
       self.match_over = True
       self.match_winner = "PLAYER"
@@ -165,7 +170,7 @@ class GameEngine:
         return
 
     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-      if self.showing_result or self.match_over:
+      if self.showing_result or self.match_over or self.animating_reveal:
         return
 
       for btn in self.buttons:
@@ -174,10 +179,24 @@ class GameEngine:
           break
 
   def update(self):
-    if self.match_over:
+    now = pygame.time.get_ticks()
+
+    # Progress reveal animation steps
+    if self.animating_reveal:
+      elapsed = now - self.reveal_start_time
+      if elapsed < 400:
+        self.countdown_text = "ROCK..."
+      elif elapsed < 800:
+        self.countdown_text = "PAPER..."
+      elif elapsed < 1200:
+        self.countdown_text = "SCISSORS..."
+      elif elapsed < self.reveal_duration:
+        self.countdown_text = "SHOOT!"
+      else:
+        self.finalize_round()
       return
 
-    now = pygame.time.get_ticks()
+    # Handle post-round result display reset
     if self.showing_result and (
         now - self.round_resolved_time >= self.display_duration
     ):
@@ -186,6 +205,52 @@ class GameEngine:
       self.result_text = "Make your move!"
       self.result_color = (190, 195, 205)
       self.showing_result = False
+
+  def draw_gesture_icon(self, surface, choice, center, size=40, color=(220, 220, 230)):
+    """Procedural vector graphics renderer for Rock, Paper, and Scissors icons."""
+    cx, cy = center
+    hs = size // 2
+
+    if choice == "ROCK":
+      # Circle stone emblem with faceted geometry
+      pygame.draw.circle(surface, color, (cx, cy), hs, width=3)
+      pygame.draw.circle(surface, (140, 60, 60), (cx, cy), hs - 4)
+      pts = [
+          (cx - 10, cy - 8),
+          (cx + 8, cy - 12),
+          (cx + 14, cy + 4),
+          (cx + 2, cy + 12),
+          (cx - 12, cy + 6),
+      ]
+      pygame.draw.polygon(surface, color, pts, width=2)
+
+    elif choice == "PAPER":
+      # Sheet document icon with corner fold
+      rect = pygame.Rect(cx - hs + 4, cy - hs, size - 8, size)
+      pygame.draw.rect(surface, (50, 120, 190), rect, border_radius=4)
+      pygame.draw.rect(surface, color, rect, width=2, border_radius=4)
+      # Lines representing text on paper
+      pygame.draw.line(
+          surface, color, (cx - 8, cy - 6), (cx + 8, cy - 6), 2
+      )
+      pygame.draw.line(
+          surface, color, (cx - 8, cy), (cx + 8, cy), 2
+      )
+      pygame.draw.line(
+          surface, color, (cx - 8, cy + 6), (cx + 4, cy + 6), 2
+      )
+
+    elif choice == "SCISSORS":
+      # Scissors blades with handle rings
+      pygame.draw.circle(surface, color, (cx - 10, cy + 12), 7, width=2)
+      pygame.draw.circle(surface, color, (cx + 10, cy + 12), 7, width=2)
+      pygame.draw.line(
+          surface, color, (cx - 7, cy + 6), (cx + 10, cy - 12), 3
+      )
+      pygame.draw.line(
+          surface, color, (cx + 7, cy + 6), (cx - 10, cy - 12), 3
+      )
+      pygame.draw.circle(surface, (220, 180, 50), (cx, cy - 1), 3)
 
   def render(self, screen):
     screen.fill((24, 28, 36))
@@ -214,31 +279,63 @@ class GameEngine:
         screen, (45, 52, 66), (25, 82), (self.width - 25, 82), 2
     )
 
-    # Arena status
+    # Arena Positions
+    p_center_x = self.width // 4 + 20
+    c_center_x = (3 * self.width) // 4 - 20
+    arena_y = 145
+
+    # Compute shaking vertical offset during reveal countdown
+    shake_y = 0
+    if self.animating_reveal:
+      shake_y = int(math.sin(pygame.time.get_ticks() * 0.03) * 12)
+
+    # Render Player Icon & Label
+    if self.animating_reveal:
+      self.draw_gesture_icon(
+          screen, "ROCK", (p_center_x, arena_y + shake_y), size=44
+      )
+    elif self.player_choice:
+      self.draw_gesture_icon(
+          screen, self.player_choice, (p_center_x, arena_y), size=44
+      )
+
     p_str = self.player_choice if self.player_choice else "--"
+    p_lbl = self.font_arena.render(f"You: {p_str}", True, (225, 225, 230))
+    screen.blit(p_lbl, (p_center_x - p_lbl.get_width() // 2, arena_y + 32))
+
+    # Render CPU Icon & Label
+    if self.animating_reveal:
+      self.draw_gesture_icon(
+          screen, "ROCK", (c_center_x, arena_y + shake_y), size=44
+      )
+    elif self.cpu_choice:
+      self.draw_gesture_icon(
+          screen, self.cpu_choice, (c_center_x, arena_y), size=44
+      )
+
     c_str = self.cpu_choice if self.cpu_choice else "--"
+    c_lbl = self.font_arena.render(f"CPU: {c_str}", True, (225, 225, 230))
+    screen.blit(c_lbl, (c_center_x - c_lbl.get_width() // 2, arena_y + 32))
 
-    arena_p = self.font_arena.render(
-        f"Your Pick:  {p_str}", True, (225, 225, 230)
-    )
-    arena_c = self.font_arena.render(
-        f"CPU Pick:  {c_str}", True, (225, 225, 230)
-    )
-    screen.blit(arena_p, (self.width // 2 - arena_p.get_width() // 2, 115))
-    screen.blit(arena_c, (self.width // 2 - arena_c.get_width() // 2, 155))
+    # Result / Countdown Banner
+    if self.animating_reveal:
+      res_surf = self.font_count.render(
+          self.countdown_text, True, (240, 210, 80)
+      )
+    else:
+      res_surf = self.font_arena.render(
+          self.result_text, True, self.result_color
+      )
+    screen.blit(res_surf, (self.width // 2 - res_surf.get_width() // 2, 212))
 
-    res_surf = self.font_arena.render(
-        self.result_text, True, self.result_color
-    )
-    screen.blit(res_surf, (self.width // 2 - res_surf.get_width() // 2, 205))
-
-    # Buttons
+    # Render Action Buttons
     mouse_pos = pygame.mouse.get_pos()
+    is_disabled = (
+        self.showing_result or self.match_over or self.animating_reveal
+    )
     for btn in self.buttons:
       if hasattr(btn, "update"):
-        btn.update(
-            mouse_pos, disabled=(self.showing_result or self.match_over)
-        )
+        btn.update(mouse_pos, disabled=is_disabled)
       btn.render(screen)
 
     # Match Victory Overlay
